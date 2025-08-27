@@ -280,13 +280,14 @@ split_by_flavor <- function(nodes, flavor_ids) {
     copy <- xml2::read_html(as.character(nodes))
     other_flavors <- xml2::xml_find_all(copy, 
     paste0(
-      "//div[@class='abc']//div[@class='",
+      ".//div[@class='flavored']//div[@class='",
       paste(flavor_ids[flavor_ids != current_flavor_id], collapse = ' or @class='),
       "']"
     ))
+    #honif(Sys.getenv('DEBUG')!='') browser()
     xml2::xml_remove(other_flavors)
     as.character(copy)
-  }, flavor_ids)
+  }, character(1))
 }
 
 use_learner <- function(nodes = NULL, flavor_ids = NULL) {
