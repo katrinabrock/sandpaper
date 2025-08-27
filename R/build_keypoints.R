@@ -11,7 +11,7 @@ build_keypoints <- function(pkg, pages = NULL, quiet = FALSE) {
   )
 }
 
-make_keypoints_section <- function(name, contents, parent) {
+make_keypoints_section <- function(name, contents, parent, ...) {
   title <- escape_ampersand(names(name))
   uri <- name
   new_section <- "<section id='{name}'>

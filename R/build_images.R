@@ -33,7 +33,7 @@ build_images <- function(pkg, pages = NULL, quiet = FALSE) {
 #'   fig_content <- get_content("01-introduction", content = "/figure", pkg = pkg)
 #'   make_images_section("01-introduction", contents = fig_content, parent = img)
 #' }
-make_images_section <- function(name, contents, parent) {
+make_images_section <- function(name, contents, parent, ...) {
   title <- escape_ampersand(names(name))
   uri <- name
   new_section <- "<section id='{name}'>

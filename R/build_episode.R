@@ -95,14 +95,14 @@ build_episode_html <- function(path_md, path_src = NULL,
 
   page_globals$metadata$update(c(nav_list, list(date = list(modified = date))))
   page_globals$learner$update(c(nav_list, list(
-    body      = use_learner(nodes),
+    body      = use_learner(nodes, flavor_ids = names(page_globals$metadata$flavor)),
     progress  = page_progress,
     updated   = date
   )))
   nav_list$page_back <- as_html(nav_list$page_back, instructor = TRUE)
   nav_list$page_forward <- as_html(nav_list$page_forward, instructor = TRUE)
   page_globals$instructor$update(c(nav_list, list(
-    body      = use_instructor(nodes),
+    body      = use_instructor(nodes, flavor_ids = names(page_globals$metadata$flavor)),
     progress  = page_progress,
     updated   = date
   )))

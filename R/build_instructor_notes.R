@@ -107,12 +107,10 @@ build_instructor_notes <- function(pkg, pages = NULL, built = NULL, quiet) {
 #'     parent = notes
 #'   )
 #' }
-make_instructornotes_section <- function(name, contents, parent) {
+make_instructornotes_section <- function(name, contents, parent, instructor = TRUE, ...) {
   # Since we have hidden the instructor notes from the learner sections,
   # there is no point to iterate here, so we return early.
-  the_call <- match.call()
-  is_learner <- endsWith(as.character(the_call[["contents"]]), "learn")
-  if (is_learner) {
+  if (!instructor) {
     return(invisible(NULL))
   }
   title <- names(name)

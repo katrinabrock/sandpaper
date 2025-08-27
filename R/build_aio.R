@@ -36,7 +36,7 @@ build_aio <- function(pkg, pages = NULL, quiet = FALSE) {
 #'     contents = episode_content, parent = aio
 #'   )
 #' }
-make_aio_section <- function(name, contents, parent) {
+make_aio_section <- function(name, contents, parent, ...) {
   # trim off the aio because we know it's a prefix
   uri <- sub("^aio-", "", name)
   title <- escape_ampersand(xml2::xml_text(contents[[1]]))

@@ -26,12 +26,21 @@ read_all_html <- function(path) {
   paths <- fs::path_abs(fs::dir_ls(path, glob = "*.html", recurse = TRUE))
   htmls <- lapply(paths, xml2::read_html)
   rel <- fs::path_rel(paths, start = path)
-  splits <- sub("^[.]$", "learner", fs::path_dir(rel))
+  splits <- vapply(
+    fs::path_dir(rel), \(split) {
+      if(!endsWith(split, 'instructor')) {
+        if(split == ".") split <- "learner"
+        split <- paste(split, "learner", sep = "/")
+      }
+      split
+    },
+    character(1)
+  )
   htmls <- split(htmls, splits)
   slugs <- split(get_slug(rel), splits)
-
-  names(htmls$learner) <- slugs$learner
-  names(htmls$instructor) <- slugs$instructor
+  for (version_id in names(htmls)) {
+    names(htmls[[version_id]]) <- slugs[[version_id]]
+  }
   c(htmls, list(paths = paths))
 }
 
@@ -94,27 +103,47 @@ read_all_html <- function(path) {
 #'   provision_agg_page(pkg, title = "All In One", slug = "aio", quiet = FALSE)
 #' }
 provision_agg_page <- function(pkg, title = "Key Points", slug = "key-points", new = FALSE) {
+  flavor_config <- pkg$meta$template$params$flavors
+  flavor_ids <- if (is.null(flavor_config)) "" else {
+    which_to_build <- vapply(flavor_config, \(flavor) {
+      # default to building if no render property
+      if(is.null(flavor[["render"]])) TRUE else flavor[["render"]]
+    }, logical(1))
+    names(flavor_config)[which_to_build]
+  }
+
   if (new) {
     if (is.null(.html$get()$template$extra)) {
       provision_extra_template(pkg)
     }
-    learner <- .html$get()$template$extra$learner
-    instructor <- .html$get()$template$extra$instructor
-    learner <- gsub("--FIXME TITLE", title, learner)
-    instructor <- gsub("--FIXME TITLE", title, instructor)
-    learner <- gsub("--FIXME", slug, learner)
-    instructor <- gsub("--FIXME", slug, instructor)
+    templates <- lapply(
+      self_name(flavor_ids), \(flavor_id) lapply(
+        self_name(c("learner", "instructor")), \(user_type) {
+          template <- .html$get()$template$extra[[flavor_id]][[user_type]]
+          template <- gsub("--FIXME TITLE", title, template)
+          template <- gsub("--FIXME", slug, template)
+          xml2::read_html(template)
+        }
+      )
+    )
   } else {
-    uri <- as_html(slug)
-    learner <- fs::path(pkg$dst_path, uri)
-    instructor <- fs::path(pkg$dst_path, "instructor", uri)
+    templates <- lapply(
+      self_name(flavor_ids), \(flavor_id) lapply(
+        self_name(c("learner", "instructor")), \(user_type) {
+          uri <- as_html(
+            slug,
+            user_type == "instructor",
+            flavor_id
+          )
+          template <- fs::path(pkg$dst_path, uri)
+          xml2::read_html(template)
+        }
+      )
+    )
   }
+  templates[["needs_episodes"]] <- new
 
-  return(list(
-    learner = xml2::read_html(learner),
-    instructor = xml2::read_html(instructor),
-    needs_episodes = new
-  ))
+  templates
 }
 
 #' @keywords internal
@@ -124,17 +153,29 @@ provision_extra_template <- function(pkg, quiet = TRUE) {
   needs_episodes <- TRUE
   html <- xml2::read_html("<section id='--FIXME'></section>")
   page <- "--FIXME.html"
-  learner <- fs::path(pkg$dst_path, page)
-  instructor <- fs::path(pkg$dst_path, "instructor", page)
+  
+  flavor_config <- page_globals$meta$get()$flavors
+  built_flavor_ids <- if (is.null(flavor_config)) "" else {
+    which_to_build <- vapply(flavor_config, \(flavor) {
+      # default to building if no render property
+      if(is.null(flavor[["render"]])) TRUE else flavor[["render"]]
+    }, logical(1))
+    names(flavor_config)[which_to_build]
+  }
+
+  page_paths <- vapply(built_flavor_ids, \(flavor_id) c(
+    fs::path(pkg$dst_path, flavor_id, page),
+    fs::path(pkg$dst_path, flavor_id, "instructor", page)
+  ), character(2))
 
   date <- Sys.Date()
   this_dat <- list(
-    this_page = "--FIXME.html",
+    this_page = page,
     body = html,
     pagetitle = "--FIXME TITLE",
     updated = date
   )
-
+  
   page_globals$instructor$update(this_dat)
   page_globals$learner$update(this_dat)
   page_globals$metadata$update(c(this_dat, list(date = list(modified = date))))
@@ -144,17 +185,25 @@ provision_extra_template <- function(pkg, quiet = TRUE) {
     global_data = page_globals, path_md = page, quiet = quiet
   )
   on.exit({
-    fs::file_delete(learner)
-    fs::file_delete(instructor)
+    fs::file_delete(page_paths)
   })
-  .html$set(
-    c("template", "extra", "learner"),
-    as.character(xml2::read_html(learner))
-  )
-  .html$set(
-    c("template", "extra", "instructor"),
-    as.character(xml2::read_html(instructor))
-  )
+  vapply(built_flavor_ids, \(flavor_id) {
+    .html$set(c(
+      "template",
+      "extra",
+      # unflavored will have an extra empty string here
+      # that's ok. it will get picked elsewhere
+      flavor_id,
+      "learner"
+    ), xml2::read_html(fs::path(pkg$dst_path, flavor_id, page)))
+    .html$set(c(
+      "template",
+      "extra",
+      flavor_id,
+      "instructor"
+    ), xml2::read_html(fs::path(pkg$dst_path, flavor_id, "instructor", page)))
+    logical()
+  }, logical())
 }
 
 section_fun <- function(slug) {
@@ -212,12 +261,17 @@ build_agg_page <- function(pkg, pages, title = NULL, slug = NULL, aggregate = "s
   path <- get_source_path() %||% root_path(pkg$src_path)
   out_path <- pkg$dst_path
   this_lesson(path)
+  pages_html <- pages
+  pages_html[['paths']] <- NULL
 
   new_content <- append == "self::node()" || append == "self::*"
   agg <- provision_agg_page(pkg, title = title, slug = slug, new = new_content)
-  if (agg$needs_episodes) {
-    remove_fix_node(agg$learner, slug)
-    remove_fix_node(agg$instructor, slug)
+  agg$needs_episodes <- NULL
+  flavor_ids <- names(agg)
+  if (new_content) {
+    lapply(agg, \(x) lapply(x, \(template) {
+      remove_fix_node(template, slug)
+    }))
   }
 
   # Get sectioning function definied in the `build_` file. For example,
@@ -225,54 +279,75 @@ build_agg_page <- function(pkg, pages, title = NULL, slug = NULL, aggregate = "s
   # `make_instructornotes_section`
   make_section <- section_fun(slug)
 
-  learn_parent <- get_content(agg$learner, content = append)
-  instruct_parent <- get_content(agg$instructor, content = append)
-  needs_content <- !new_content && length(instruct_parent) == 0
+  parents <- lapply(agg, \(x) lapply(x, \(template) {
+    get_content(template, content = append)
+  }))
+  needs_content <- !new_content && all(vapply(parents, \(template_pair) length(
+    template_pair[["instructor"]]
+  ), numeric(1)) == 0)
   if (needs_content) {
     # When the content requested does not exist, we append a new section with
     # the id of aggregate-{slug}
     sid <- paste0("aggregate-", slug)
-    learn_content <- get_content(agg$learner, content = "self::node()")
-    xml2::xml_add_child(learn_content, "section", id = sid)
-    learn_parent <- xml2::xml_child(learn_content, xml2::xml_length(learn_content))
-
-    instruct_content <- get_content(agg$instructor, content = "self::node()")
-    xml2::xml_add_child(instruct_content, "section", id = sid)
-    instruct_parent <- xml2::xml_child(instruct_content, xml2::xml_length(instruct_content))
+    contents <- lapply(names(agg), \(flavor_id) lapply(
+      c('learner', 'instructor'), 
+      \(user_type) {
+        content <- get_content(agg[[flavor_id]][[user_type]], content = "self::node()")
+        xml2::xml_add_child(content, "section", id = sid)
+        parents[[flavor_id]][[user_type]] <- xml2::xml_child(content, xml2::xml_length(content))
+        content
+      }
+    ))
   }
   # clean up any content that currently exists
-  xml2::xml_remove(xml2::xml_children(learn_parent))
-  xml2::xml_remove(xml2::xml_children(instruct_parent))
+  lapply(parents, \(x) lapply(x, \(parent) {
+    xml2::xml_remove(xml2::xml_children(parent))
+  }))
 
   the_episodes <- .resources$get()[["episodes"]]
   the_slugs <- get_slug(the_episodes)
   the_slugs <- if (prefix) paste0(slug, "-", the_slugs) else the_slugs
-
   for (episode in seq(the_episodes)) {
     ep_learn <- ep_instruct <- the_episodes[episode]
     ename <- the_slugs[episode]
-    if (!is.null(pages)) {
+    if (!is.null(pages_html)) {
       name <- if (prefix) sub(paste0("^", slug, "-"), "", ename) else ename
-      ep_learn <- pages$learner[[name]]
-      ep_instruct <- pages$instructor[[name]]
+      ep <- lapply(pages_html, \(x) x[[name]])
     }
-    ep_title <- as.character(xml2::xml_contents(get_content(ep_learn, ".//h1")))
+    ep_title <- as.character(xml2::xml_contents(get_content(ep[[1]], ".//h1")))
     names(ename) <- paste(ep_title, collapse = "")
-    ep_learn <- get_content(ep_learn, content = aggregate, pkg = pkg)
-    ep_instruct <- get_content(ep_instruct, content = aggregate, pkg = pkg, instructor = TRUE)
-    make_section(ename, ep_learn, learn_parent)
-    make_section(ename, ep_instruct, instruct_parent)
+    for (i in seq_along(ep[[1]])){
+      fid_i <- strsplit(names(ep)[i], "/", fixed = TRUE)[[1]]
+      if(length(fid_i) == 1) {
+        flavor_id <- ""
+        user_type <- fid_i
+      } else {
+        flavor_id <- fid_i[1]
+        user_type <- fid_i[2]
+      }
+      ep[[i]] <- get_content(
+        ep[[i]], content = aggregate, pkg = pkg,
+        instructor = user_type == "instructor",
+        flavor_id = if(flavor_id == "") NULL else flavor_id
+      )
+      make_section(ename, ep[[i]], parents[[flavor_id]][[user_type]], instructor = user_type == "instructor")
+    }
   }
-
-  learn_out <- fs::path(out_path, as_html(slug))
-  instruct_out <- fs::path(out_path, as_html(slug, instructor = TRUE))
-  report <- "Writing '{.file {out}}'"
-  out <- fs::path_rel(instruct_out, pkg$dst_path)
-  if (!quiet) cli::cli_text(report)
-  writeLines(as.character(agg$instructor), instruct_out)
-  out <- fs::path_rel(learn_out, pkg$dst_path)
-  if (!quiet) cli::cli_text(report)
-  writeLines(as.character(agg$learner), learn_out)
+  
+  report <- "Writing '{.file {rel_out_path}}'"
+  outs <- lapply(flavor_ids, \(flavor_id) lapply(
+    c("learner", "instructor"),
+    \(user_type) {
+      rel_out_path <- as_html(
+        slug,
+        instructor = user_type == "instructor",
+        flavor_id = flavor_id
+      )
+      full_out_path <- fs::path(out_path, rel_out_path)
+      if (!quiet) cli::cli_text(report)
+      writeLines(as.character(agg[[flavor_id]][[user_type]]), full_out_path)
+    }
+  ))
 }
 
 #' Get sections from an episode's HTML page
@@ -318,13 +393,9 @@ build_agg_page <- function(pkg, pages, title = NULL, slug = NULL, aggregate = "s
 #' }
 get_content <- function(
     episode, content = "*", label = FALSE, pkg = NULL,
-    instructor = FALSE) {
+    instructor = FALSE, flavor_id = NULL) {
   if (!inherits(episode, "xml_document")) {
-    if (instructor) {
-      path <- fs::path(pkg$dst_path, "instructor", as_html(episode))
-    } else {
-      path <- fs::path(pkg$dst_path, as_html(episode))
-    }
+    path <- fs::path(pkg$dst_path, as_html(episode, instructor = instructor, flavor_id = flavor_id))
     episode <- xml2::read_html(path)
   }
   XPath <- ".//main/div[contains(@class, 'lesson-content')]/{content}"
@@ -365,4 +436,6 @@ urls_to_sitemap <- function(urls) {
   }
   doc
 }
+
+self_name <- \(x) structure(x, names = x)
 

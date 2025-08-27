@@ -40,6 +40,7 @@ initialise_metadata <- function(path = ".") {
     this_metadata$set("license_url", cfg$license_url %||% "LICENSE.html")
     created <- cfg$created %||% tail(gert::git_log(max = 1e6, repo = path)$time, 1)
     this_metadata$set(c("date", "created"), format(as.Date(created), "%F"))
+    this_metadata$set("flavors", cfg$flavors)
     # TODO: implement custom DESCRIPTION
     # For the Description, it would be good to take this from an ABOUT page
     # where the description paragraph can be found under the Description header

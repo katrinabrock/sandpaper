@@ -3,10 +3,12 @@
 
 `%nin%` <- Negate("%in%")
 
-as_html <- function(i, instructor = FALSE) {
+as_html <- function(i, instructor = FALSE, flavor_id = NA) {
   if (length(i) == 0) return(i)
   res <- fs::path_ext_set(fs::path_file(i), "html")
-  if (instructor) fs::path("instructor", res) else res
+  if (instructor) res <- fs::path("instructor", res)
+  if (!is.na(flavor_id)) res <- fs::path(flavor_id, res)
+  res
 }
 
 example_can_run <- function(need_git = FALSE, skip_cran = TRUE) {

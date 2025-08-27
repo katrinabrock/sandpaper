@@ -41,10 +41,6 @@
 #' @seealso [set_globals()] for definitions of the global data,
 #'   [update_sidebar()] for context of how the sidebar is updated,
 build_html <- function(template = "chapter", pkg, nodes, global_data, path_md, quiet = TRUE) {
-  ipath <- fs::path(pkg$dst_path, "instructor")
-  if (!fs::dir_exists(ipath)) fs::dir_create(ipath)
-
-  this_page <- as_html(path_md, instructor = TRUE)
   meta <- global_data$metadata
   base_url <- meta$get()$url
 
@@ -56,44 +52,77 @@ build_html <- function(template = "chapter", pkg, nodes, global_data, path_md, q
     instructor_nodes <- nodes[[1]]
     learner_nodes <- nodes[[2]]
   }
-
-  # Process instructor page ----------------------------------------------------
-  update_sidebar(global_data$instructor, instructor_nodes, fs::path_file(this_page))
-  meta$set("url", paste0(base_url, this_page))
+  
+  # translated
   translated <- fill_translation_vars(global_data$instructor$get())
-  global_data$instructor$set("json", fill_metadata_template(meta))
   global_data$instructor$set("translate", translated)
-  global_data$instructor$set("citation", meta$get()$citation)
+  global_data$learner$set("translate", translated)
+  
+  # figure out what flavors need building
+  flavor_ids_to_build <- if (is.null(meta$get()$flavors)) NA else {
+    flavor_config <- meta$get()$flavors
+    which_to_build <- vapply(flavor_config, \(flavor) {
+      # default to building if no render property
+      if(is.null(flavor[['render']])) TRUE else flavor[['render']]
+    }, logical(1))
+    names(flavor_config)[which_to_build]
+  }
+  
+  select_flavor_data <- function(data, flavor_id) {
+    if(length(data[['body']]) > 1) {
+      data[['body']] <- data[['body']][[flavor_id]]
+    }
+    data
+  }
 
-  # add tracker script
-  global_data$instructor$set("analytics", processTracker(meta$get()$analytics))
+  for (flavor_id in flavor_ids_to_build) {
+    fpath <- if(is.na(flavor_id)) pkg$dst_path else fs::path(pkg$dst_path, flavor_id)
+    ipath <- fs::path(fpath, "instructor")
+    if (!fs::dir_exists(ipath)) fs::dir_create(ipath)
 
-  modified <- pkgdown::render_page(pkg,
-    template,
-    data = global_data$instructor$get(),
-    depth = 1L,
-    path = this_page,
-    quiet = quiet
-  )
+    this_page <- as_html(path_md, instructor = TRUE, flavor_id = flavor_id)
 
-  # Process learner page if needed ---------------------------------------------
-  if (modified) {
-    global_data$learner$set("translate", translated)
-    this_page <- as_html(this_page)
-    update_sidebar(global_data$learner, learner_nodes, fs::path_file(this_page))
+    # Process instructor page ----------------------------------------------------
+    update_sidebar(global_data$instructor, instructor_nodes, fs::path_file(this_page))
     meta$set("url", paste0(base_url, this_page))
-    global_data$learner$set("json", fill_metadata_template(meta))
-    global_data$learner$set("citation", meta$get()$citation)
+    global_data$instructor$set("json", fill_metadata_template(meta))
+    global_data$instructor$set("citation", meta$get()$citation)
 
     # add tracker script
-    global_data$learner$set("analytics", processTracker(meta$get()$analytics))
+    global_data$instructor$set("analytics", processTracker(meta$get()$analytics))
 
-    pkgdown::render_page(pkg,
+    # render instructor page
+    # render_page writes and returns TRUE if there is a change,
+    # returns FALSE if not
+    
+    modified <- pkgdown::render_page(pkg,
       template,
-      data = global_data$learner$get(),
-      depth = 0L,
+      data = select_flavor_data(global_data$instructor$get(), flavor_id),
+      depth = 1L + !is.na(flavor_id),
       path = this_page,
       quiet = quiet
     )
+
+    # Process learner page if needed ---------------------------------------------
+    # because instructor page content is a superset of learner page content,
+    # learner page only needs to be updated if instructor page changed
+    if (modified) {
+      this_page <- as_html(this_page, flavor_id = flavor_id)
+      update_sidebar(global_data$learner, learner_nodes, fs::path_file(this_page))
+      meta$set("url", paste0(base_url, this_page))
+      global_data$learner$set("json", fill_metadata_template(meta))
+      global_data$learner$set("citation", meta$get()$citation)
+
+      # add tracker script
+      global_data$learner$set("analytics", processTracker(meta$get()$analytics))
+
+      pkgdown::render_page(pkg,
+        template,
+        data = select_flavor_data(global_data$learner$get(), flavor_id),
+        depth = 0L + !is.na(flavor_id),
+        path = this_page,
+        quiet = quiet
+      )
+    }
   }
 }

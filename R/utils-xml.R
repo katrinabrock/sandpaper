@@ -270,15 +270,38 @@ fix_setup_link <- function(nodes = NULL) {
   invisible(nodes)
 }
 
-use_learner <- function(nodes = NULL) {
+remove_other_flavors <- function(nodes = NULL, flavor = NULL) {
+  if (length(nodes) == 0) return(nodes)
+  if (!is.character(flavor)) return(nodes)
+}
+
+split_by_flavor <- function(nodes, flavor_ids) {
+  vapply(flavor_ids, \(current_flavor_id) {
+    copy <- xml2::read_html(as.character(nodes))
+    other_flavors <- xml2::xml_find_all(copy, 
+    paste0(
+      "//div[@class='abc']//div[@class='",
+      paste(flavor_ids[flavor_ids != current_flavor_id], collapse = ' or @class='),
+      "']"
+    ))
+    xml2::xml_remove(other_flavors)
+    as.character(copy)
+  }, flavor_ids)
+}
+
+use_learner <- function(nodes = NULL, flavor_ids = NULL) {
   if (length(nodes) == 0) return(nodes)
   copy <- xml2::read_html(as.character(nodes))
   inst <- xml2::xml_find_all(copy, ".//div[contains(@class, 'instructor')]")
   xml2::xml_remove(inst)
-  as.character(copy)
+  copy <- as.character(copy)
+  if (!is.null(flavor_ids)) {
+    copy <- split_by_flavor(nodes = copy, flavor_ids = flavor_ids)
+  }
+  copy
 }
 
-use_instructor <- function(nodes = NULL) {
+use_instructor <- function(nodes = NULL, flavor_ids = NULL) {
   if (length(nodes) == 0) return(nodes)
   copy <- xml2::read_html(as.character(nodes))
   # find all local links and transform non-html and nested links ---------
@@ -300,5 +323,9 @@ use_instructor <- function(nodes = NULL) {
   # find all images and refer back to source
   img <- xml2::xml_find_all(copy, ".//img[not(starts-with(@src, 'http'))]")
   xml2::xml_set_attr(img, "src", fs::path("../", xml2::xml_attr(img, "src")))
-  as.character(copy)
+  copy <- as.character(copy)
+  if (!is.null(flavor_ids)){
+    copy <- split_by_flavor(nodes = copy, flavor_ids = flavor_ids)
+  }
+  copy
 }
