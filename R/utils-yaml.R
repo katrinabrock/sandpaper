@@ -193,19 +193,19 @@ create_pkgdown_yaml <- function(path) {
   usr <- yaml::read_yaml(path_config(path), eval.expr = FALSE)
   handout <- if (is.null(usr$handout)) "~" else siQuote(usr$handout)
   handout <- if (isTRUE(handout)) "files/code-handout.R" else handout
-  yaml <- get_yaml_text(template_pkgdown())
   # Should we display DOI info? If so, parse the URL and return the doi
   # note that a missing doi will return nothing
   doi <- sub("^[/]", "", xml2::url_parse(usr$doi)$path)
   doi <- if (length(doi) == 1L && nzchar(doi)) siQuote(doi) else "~"
-  flavors <- if(!is.null(usr$flavors)) lapply(self_name(usr$flavors), \(flavor_id) {
+  flavors <- if(!is.null(usr$flavors)) list(items = lapply(names(usr$flavors), \(flavor_id) {
     flavor_config <- usr$flavors[[flavor_id]]
     if (flavor_config$render) list(
-      flavor_id = flavor_id,
+      flavor_dir = paste0(flavor_id, "/"),
       flavor_title = flavor_config$title
     ) else NULL
-  })
+  })) else FALSE
   flavors <- flavors[lengths(flavors) > 0]
+  yaml <- get_yaml_text(template_pkgdown())
   yaml <- whisker::whisker.render(yaml,
     data = list(
       # Basic information
@@ -237,8 +237,7 @@ create_pkgdown_yaml <- function(path) {
       # Enable tracking?
       analytics  = if (is.null(usr$analytics)) NULL else (siQuote(usr$analytics)),
       # Flavor info
-      has_flavors = !is.null(usr$flavors),
-      flavors = flavors,
+      render_flavors = gsub("\n", "\n      ", yaml::as.yaml(flavors)),
       NULL
     )
   )

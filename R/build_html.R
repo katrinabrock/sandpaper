@@ -79,7 +79,8 @@ build_html <- function(template = "chapter", pkg, nodes, global_data, path_md, q
         data[[key]] <- data[[key]][[flavor_id]]
       }
     }
-    data[['flavor_id']] <- flavor_id
+    data[['current_flavor_dir']] <- paste0(flavor_id, "/")
+    data[['current_flavor_title']] <- lesson_flavor_config[[flavor_id]][['title']]
     data
   }
 
@@ -91,7 +92,6 @@ build_html <- function(template = "chapter", pkg, nodes, global_data, path_md, q
     this_page <- as_html(path_md, instructor = TRUE, flavor_id = flavor_id)
 
     # Process instructor page ----------------------------------------------------
-    if(endsWith(path_md, 'r_only.md')) browser()
     update_sidebar(
       global_data$instructor,
       instructor_nodes,

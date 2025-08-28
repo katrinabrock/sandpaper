@@ -30,3 +30,6 @@ template:
     beta: {{ beta }}
     stable: {{ stable }}
     doi: {{ doi }}
+    render_flavors:
+      {{{ render_flavors }}}
+    
