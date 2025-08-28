@@ -198,6 +198,14 @@ create_pkgdown_yaml <- function(path) {
   # note that a missing doi will return nothing
   doi <- sub("^[/]", "", xml2::url_parse(usr$doi)$path)
   doi <- if (length(doi) == 1L && nzchar(doi)) siQuote(doi) else "~"
+  flavors <- if(!is.null(usr$flavors)) lapply(self_name(usr$flavors), \(flavor_id) {
+    flavor_config <- usr$flavors[[flavor_id]]
+    if (flavor_config$render) list(
+      flavor_id = flavor_id,
+      flavor_title = flavor_config$title
+    ) else NULL
+  })
+  flavors <- flavors[lengths(flavors) > 0]
   yaml <- whisker::whisker.render(yaml,
     data = list(
       # Basic information
@@ -228,6 +236,9 @@ create_pkgdown_yaml <- function(path) {
       doi        = doi,
       # Enable tracking?
       analytics  = if (is.null(usr$analytics)) NULL else (siQuote(usr$analytics)),
+      # Flavor info
+      has_flavors = !is.null(usr$flavors),
+      flavors = flavors,
       NULL
     )
   )

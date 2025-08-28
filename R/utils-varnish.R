@@ -82,40 +82,63 @@ set_globals <- function(path) {
   # get sidebar numbering disable option from config, if null set FALSE
   disable_numbering <- this_metadata$get()[["disable_sidebar_numbering"]] %||% FALSE
 
-  instructor_sidebar <- create_sidebar(
-    c(idx, these_resources[["episodes"]]),
-    disable_numbering = disable_numbering
-  )
-  # check if we have a title in the index sidebar and replace with
-  # "summary and schedule" if it does not exist.
-  idx_item <- xml2::read_html(instructor_sidebar[[1]])
-  idx_link <- xml2::xml_find_first(idx_item, ".//a")
-  idx_text <- xml2::xml_contents(idx_link)
-  href <- xml2::xml_attr(idx_link, "href")
+  instructor_sidebars <- list()
+  learner_sidebars <- list()
+  flavor_config <- this_metadata$get()$flavors
 
-  no_index_title <- (
-      length(idx_text) == 1 &&
-      xml2::xml_text(idx_text) == "0. "
-    ) ||
-    (
-      disable_numbering &&
-      length(idx_text) == 0 &&
-      href == "index.html"
-  )
+  for(flavor_id in names(flavor_config)) {
 
-  if (no_index_title) {
-    xml2::xml_set_text(idx_link, tr_computed("SummaryAndSchedule"))
-  } else {
-    xml2::xml_set_text(idx_text, sub("^0[.] ", "", xml2::xml_text(idx_text)))
-  }
-  sindex <- create_sidebar_item(nodes = NULL, as.character(idx_link), 1)
-  learner_sidebar <- instructor_sidebar
-  instructor_sidebar[[1]] <- sindex
-  if (no_index_title) {
-    xml2::xml_set_text(idx_link, tr_computed("SummaryAndSetup"))
+    if (isFALSE(flavor_config[[flavor_id]][["render"]])) next
+
+    episodes <- if(is.na(flavor_id)) these_resources[["episodes"]] else {
+      which_episodes <- vapply(these_resources[["episodes"]], \(path_md) {
+        yaml <- yaml::yaml.load(politely_get_yaml(path_md), eval.expr = FALSE)
+        if("flavors" %in% names(yaml)) flavor_id %in% yaml[["flavors"]] else TRUE
+      }, logical(1))
+      these_resources[["episodes"]][which_episodes]
+    }
+    instructor_sidebar <- create_sidebar(
+      c(idx, episodes),
+      disable_numbering = disable_numbering
+    )
+    # check if we have a title in the index sidebar and replace with
+    # "summary and schedule" if it does not exist.
+    idx_item <- xml2::read_html(instructor_sidebar[[1]])
+    idx_link <- xml2::xml_find_first(idx_item, ".//a")
+    idx_text <- xml2::xml_contents(idx_link)
+    href <- xml2::xml_attr(idx_link, "href")
+
+    no_index_title <- (
+        length(idx_text) == 1 &&
+        xml2::xml_text(idx_text) == "0. "
+      ) ||
+      (
+        disable_numbering &&
+        length(idx_text) == 0 &&
+        href == "index.html"
+    )
+
+    if (no_index_title) {
+      xml2::xml_set_text(idx_link, tr_computed("SummaryAndSchedule"))
+    } else {
+      xml2::xml_set_text(idx_text, sub("^0[.] ", "", xml2::xml_text(idx_text)))
+    }
     sindex <- create_sidebar_item(nodes = NULL, as.character(idx_link), 1)
+    learner_sidebar <- instructor_sidebar
+    instructor_sidebar[[1]] <- sindex
+    if (no_index_title) {
+      xml2::xml_set_text(idx_link, tr_computed("SummaryAndSetup"))
+      sindex <- create_sidebar_item(nodes = NULL, as.character(idx_link), 1)
+    }
+    learner_sidebar[[1]] <- sindex
+    if(is.na(flavor_id)){
+      instructor_sidebars <- instructor_sidebar
+      learner_sidebars <- learner_sidebar
+    } else {
+      instructor_sidebars[[flavor_id]] <- instructor_sidebar
+      learner_sidebars[[flavor_id]] <- learner_sidebar
+    }
   }
-  learner_sidebar[[1]] <- sindex
 
   # Resources
   learner <- create_resources_dropdown(these_resources[["learners"]],
@@ -130,7 +153,7 @@ set_globals <- function(path) {
     c(list(
       aio = TRUE,
       instructor = FALSE,
-      sidebar = learner_sidebar,
+      sidebar = learner_sidebars,
       more = paste(learner$extras, collapse = ""),
       resources = paste(learner$resources, collapse = ""),
       translate = tr_varnish(),
@@ -142,7 +165,7 @@ set_globals <- function(path) {
     c(list(
       aio = TRUE,
       instructor = TRUE,
-      sidebar = instructor_sidebar,
+      sidebar = instructor_sidebars,
       more = paste(instructor$extras, collapse = ""),
       resources = paste(instructor$resources, collapse = ""),
       translate = tr_varnish(),

@@ -92,7 +92,6 @@ build_episode_html <- function(path_md, path_src = NULL,
   this_page <- as_html(path_md)
   nav_list <- get_nav_data(path_md, path_src, home,
     this_page, page_back, page_forward)
-  if(endsWith(path_md, '01_introduction.md')) Sys.setenv(DEBUG=1)
   page_globals$metadata$update(c(nav_list, list(date = list(modified = date))))
   flavor_ids <- names(page_globals$metadata$get()$flavors)
   page_globals$learner$update(c(nav_list, list(
@@ -100,6 +99,7 @@ build_episode_html <- function(path_md, path_src = NULL,
     progress  = page_progress,
     updated   = date
   )))
+  
   nav_list$page_back <- as_html(nav_list$page_back, instructor = TRUE)
   nav_list$page_forward <- as_html(nav_list$page_forward, instructor = TRUE)
   page_globals$instructor$update(c(nav_list, list(
@@ -148,6 +148,7 @@ get_nav_data <- function(path_md, path_src = NULL, home = NULL,
     minutes       = as.integer(yaml$teaching) + as.integer(yaml$exercises),
     file_source   = fs::path_rel(path_src, start = home),
     this_page     = fs::path_file(this_page),
+    page_flavors  = yaml$flavors,
     page_back     = page_back,
     back_title    = pb_title,
     page_forward  = page_forward,

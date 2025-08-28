@@ -58,20 +58,28 @@ build_html <- function(template = "chapter", pkg, nodes, global_data, path_md, q
   global_data$instructor$set("translate", translated)
   global_data$learner$set("translate", translated)
   
+
+  lesson_flavor_config <- meta$get()$flavors
+  ep_flavor_ids <- meta$get()$page_flavors
+
   # figure out what flavors need building
-  flavor_ids_to_build <- if (is.null(meta$get()$flavors)) NA else {
-    flavor_config <- meta$get()$flavors
-    which_to_build <- vapply(flavor_config, \(flavor) {
+  flavor_ids_to_build <- if (is.null(lesson_flavor_config)) NA else {
+    which_to_build <- vapply(lesson_flavor_config, \(flavor) {
       # default to building if no render property
       if(is.null(flavor[['render']])) TRUE else flavor[['render']]
     }, logical(1))
-    names(flavor_config)[which_to_build]
+    to_build <- names(lesson_flavor_config)[which_to_build]
+    if (!is.null(ep_flavor_ids)) to_build <- ep_flavor_ids[ep_flavor_ids %in% to_build]
+    to_build
   }
   
   select_flavor_data <- function(data, flavor_id) {
-    if(length(data[['body']]) > 1) {
-      data[['body']] <- data[['body']][[flavor_id]]
+    for (key in c("body", "sidebar")) {
+      if (length(data[[key]]) > 1) {
+        data[[key]] <- data[[key]][[flavor_id]]
+      }
     }
+    data[['flavor_id']] <- flavor_id
     data
   }
 
@@ -83,7 +91,13 @@ build_html <- function(template = "chapter", pkg, nodes, global_data, path_md, q
     this_page <- as_html(path_md, instructor = TRUE, flavor_id = flavor_id)
 
     # Process instructor page ----------------------------------------------------
-    update_sidebar(global_data$instructor, instructor_nodes, fs::path_file(this_page))
+    if(endsWith(path_md, 'r_only.md')) browser()
+    update_sidebar(
+      global_data$instructor,
+      instructor_nodes,
+      fs::path_file(this_page),
+      flavor_id = flavor_id
+    )
     meta$set("url", paste0(base_url, this_page))
     global_data$instructor$set("json", fill_metadata_template(meta))
     global_data$instructor$set("citation", meta$get()$citation)
@@ -108,7 +122,12 @@ build_html <- function(template = "chapter", pkg, nodes, global_data, path_md, q
     # learner page only needs to be updated if instructor page changed
     if (modified) {
       this_page <- as_html(this_page, flavor_id = flavor_id)
-      update_sidebar(global_data$learner, learner_nodes, fs::path_file(this_page))
+      update_sidebar(
+        global_data$learner,
+        learner_nodes,
+        fs::path_file(this_page),
+        flavor_id = flavor_id
+      )
       meta$set("url", paste0(base_url, this_page))
       global_data$learner$set("json", fill_metadata_template(meta))
       global_data$learner$set("citation", meta$get()$citation)

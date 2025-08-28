@@ -180,6 +180,16 @@ provision_extra_template <- function(pkg, quiet = TRUE) {
   page_globals$learner$update(this_dat)
   page_globals$metadata$update(c(this_dat, list(date = list(modified = date))))
 
+  flavor_ids <- names(page_globals$metadata$get()$flavors)
+  if(!is.null(flavor_ids)) {
+    for(user_type in c("learner", "instructor")) {
+      sidebar <- page_globals[[user_type]]$get()$sidebar
+      page_globals[[user_type]]$update(list(sidebar = lapply(self_name(flavor_ids), \(x) {
+        sidebar
+      })))
+    }
+  }
+
   build_html(
     template = "extra", pkg = pkg, nodes = html,
     global_data = page_globals, path_md = page, quiet = quiet
@@ -313,6 +323,8 @@ build_agg_page <- function(pkg, pages, title = NULL, slug = NULL, aggregate = "s
     if (!is.null(pages_html)) {
       name <- if (prefix) sub(paste0("^", slug, "-"), "", ename) else ename
       ep <- lapply(pages_html, \(x) x[[name]])
+      # remove NULLs representing flavors that don't have this episode
+      ep <- ep[lengths(ep) > 0]
     }
     ep_title <- as.character(xml2::xml_contents(get_content(ep[[1]], ".//h1")))
     names(ename) <- paste(ep_title, collapse = "")

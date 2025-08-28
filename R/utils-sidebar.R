@@ -193,11 +193,12 @@ create_sidebar <- function(
 #' @rdname create_sidebar
 update_sidebar <- function(
     sidebar = NULL, nodes = NULL, this_page = NULL,
-    title = NULL, item = NULL) {
+    title = NULL, item = NULL, flavor_id = NULL) {
   if (is.null(sidebar)) {
     return(sidebar)
   }
   this_sidebar <- sidebar$get()[["sidebar"]]
+  if(is.character(flavor_id)) this_sidebar <- this_sidebar[[flavor_id]]
   # When there is no title defined, we extract it from the links.
   if (is.null(title)) {
     item <- grep(
@@ -207,7 +208,7 @@ update_sidebar <- function(
     # if we cannot find it from the links, then we do not need to edit the
     # sidebar.
     if (length(item) == 0) {
-      sidebar$set("sidebar", paste(this_sidebar, collapse = "\n"))
+      #sidebar$set("sidebar", paste(this_sidebar, collapse = "\n"))
       return(sidebar)
     }
     # extract the title from the node, making sure to preserve the HTML content
@@ -223,7 +224,12 @@ update_sidebar <- function(
   if (length(item) > 0) {
     this_sidebar[item] <- create_sidebar_item(nodes, title, "current")
   }
-  sidebar$set("sidebar", paste(this_sidebar, collapse = "\n"))
+  this_sidebar <- paste(this_sidebar, collapse = "\n")
+  if(is.character(flavor_id)) {
+    new_sidebar <- sidebar$get()[["sidebar"]]
+    new_sidebar[[flavor_id]] <- this_sidebar
+  } else new_sidebar <- this_sidebar
+  sidebar$set("sidebar", new_sidebar)
 }
 
 #' Fix the refs for a vector of sidebar nodes
