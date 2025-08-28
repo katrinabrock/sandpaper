@@ -40,10 +40,22 @@ build_404 <- function(pkg, quiet = FALSE) {
     # update navigation so that we have full URL
     nav <- page_globals$learner$get()[c("sidebar", "more", "resources")]
     for (item in names(nav)) {
+      
       # replace the relative index with
-      new <- fix_sidebar_href(nav[[item]], server = url)
-      if (length(nav[[item]]) == 1L) {
-        new <- paste(new, collapse = "")
+      new <- if (is.list(nav[[item]]))  lapply(self_name(names(nav[[item]])), \(flavor_id) {
+        new <- fix_sidebar_href(
+          nav[[item]][[flavor_id]],
+          server = paste0(url, flavor_id, '/')
+        )
+        if (length(nav[[item]][[flavor_id]]) == 1L) {
+          new <- paste(new, collapse = "")
+        }
+        new
+      }) else {
+        fix_sidebar_href(nav[[item]], server = url)
+        if (length(nav[[item]]) == 1L) {
+          new <- paste(new, collapse = "")
+        }
       }
       page_globals$learner$set(item, new)
       page_globals$instructor$set(item, new)
